@@ -1,4 +1,4 @@
-name: Server Heartbeat
+name: Server Heartbeat (with Retry)
 
 on:
   schedule:
@@ -11,9 +11,24 @@ jobs:
     steps:
       - name: Ping EGSPOT License Server
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://activation.egspot.com/health)
-          if [ "$STATUS" != "200" ]; then
-            echo "❌ Server DOWN — HTTP $STATUS"
-            exit 1
-          fi
-          echo "✅ Server OK — HTTP $STATUS"
+          URL="https://activation.egspot.com/health"
+          ATTEMPTS=3
+          SLEEP_TIME=10 # Seconds to wait between retries
+
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "Attempt $i of $ATTEMPTS..."
+            
+            # -s (silent), -L (follow), --max-time (timeout)
+            STATUS=$(curl -sL -o /dev/null -w "%{http_code}" --max-time 15 "$URL")
+
+            if [ "$STATUS" == "200" ]; then
+              echo "✅ Server OK — HTTP $STATUS"
+              exit 0
+            fi
+
+            echo "⚠️ Attempt $i failed (HTTP $STATUS). Retrying in ${SLEEP_TIME}s..."
+            sleep $SLEEP_TIME
+          done
+
+          echo "❌ Server STILL DOWN after $ATTEMPTS attempts."
+          exit 1
